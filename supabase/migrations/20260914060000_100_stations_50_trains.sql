@@ -186,7 +186,34 @@ SET train_name = EXCLUDED.train_name,
     source_station_id = EXCLUDED.source_station_id,
     destination_station_id = EXCLUDED.destination_station_id;
 
--- 4. Populate train stops (Timetable for Live Map)
+-- 4. Ensure train_stops table exists
+CREATE TABLE IF NOT EXISTS public.train_stops (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  train_id uuid NOT NULL REFERENCES public.trains(id) ON DELETE CASCADE,
+  station_id uuid NOT NULL REFERENCES public.stations(id) ON DELETE RESTRICT,
+  stop_order int NOT NULL,
+  arrival_time time,
+  departure_time time,
+  day_offset int NOT NULL DEFAULT 0,
+  distance_km int NOT NULL DEFAULT 0,
+  halt_minutes int NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (train_id, stop_order)
+);
+
+GRANT SELECT ON public.train_stops TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.train_stops TO authenticated;
+GRANT ALL ON public.train_stops TO service_role;
+ALTER TABLE public.train_stops ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'train_stops' AND policyname = 'train_stops public read') THEN
+    CREATE POLICY "train_stops public read" ON public.train_stops FOR SELECT TO anon, authenticated USING (true);
+  END IF;
+END $$;
+
+-- 5. Populate train stops (Timetable for Live Map)
 INSERT INTO public.train_stops (train_id, station_id, stop_order, arrival_time, departure_time, day_offset, distance_km, halt_minutes)
 SELECT tr.id, tr.source_station_id, 1, NULL, s.departure_time, 0, 0, 0
 FROM public.trains tr
@@ -323,3 +350,15 @@ END; $$;
 
 REVOKE EXECUTE ON FUNCTION public.grant_admin_by_email(text) FROM anon, public;
 GRANT EXECUTE ON FUNCTION public.grant_admin_by_email(text) TO authenticated;
+
+-- Auto-elevate akashasakash3@gmail.com to admin role
+DO $$
+DECLARE
+  v_uid uuid;
+BEGIN
+  SELECT id INTO v_uid FROM auth.users WHERE lower(email) = 'akashasakash3@gmail.com' LIMIT 1;
+  IF v_uid IS NOT NULL THEN
+    INSERT INTO public.user_roles (user_id, role) VALUES (v_uid, 'admin')
+    ON CONFLICT (user_id, role) DO NOTHING;
+  END IF;
+END $$;
