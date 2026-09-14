@@ -17,25 +17,54 @@ export type StationRow = {
   longitude: number | null;
 };
 
-export const listStations = async () =>
-  ok<StationRow[]>(
-    await supabase
-      .from("stations")
-      .select("id, station_code, station_name, city, latitude, longitude")
-      .order("station_code"),
-  );
+export const listStations = async (): Promise<StationRow[]> => {
+  const { data, error } = await supabase
+    .from("stations")
+    .select("id, station_code, station_name, city, latitude, longitude")
+    .order("station_code");
+
+  if (!error && data) return data as unknown as StationRow[];
+
+  // Fallback if latitude/longitude columns don't exist yet
+  const fallback = await supabase
+    .from("stations")
+    .select("id, station_code, station_name, city")
+    .order("station_code");
+
+  if (fallback.error) throw new Error(fallback.error.message);
+  return (fallback.data ?? []).map((s) => ({
+    ...s,
+    latitude: null,
+    longitude: null,
+  })) as StationRow[];
+};
 
 export async function saveStation(row: Partial<StationRow>) {
-  const payload = {
+  const payload: Record<string, unknown> = {
     station_code: (row.station_code ?? "").toUpperCase().trim(),
     station_name: (row.station_name ?? "").trim(),
     city: (row.city ?? "").trim(),
-    latitude: row.latitude ?? null,
-    longitude: row.longitude ?? null,
   };
-  const res = row.id
-    ? await supabase.from("stations").update(payload).eq("id", row.id)
-    : await supabase.from("stations").insert(payload);
+  if (row.latitude !== undefined) payload.latitude = row.latitude;
+  if (row.longitude !== undefined) payload.longitude = row.longitude;
+
+  let res = row.id
+    ? await (supabase.from("stations") as any).update(payload).eq("id", row.id)
+    : await (supabase.from("stations") as any).insert(payload);
+
+  if (
+    res.error &&
+    (res.error.message.includes("latitude") ||
+      res.error.message.includes("column") ||
+      res.error.message.includes("schema cache"))
+  ) {
+    delete payload.latitude;
+    delete payload.longitude;
+    res = row.id
+      ? await (supabase.from("stations") as any).update(payload).eq("id", row.id)
+      : await (supabase.from("stations") as any).insert(payload);
+  }
+
   if (res.error) throw new Error(res.error.message);
 }
 
@@ -251,7 +280,7 @@ export async function seedNetworkData(
   // 1. Upsert 100 stations in chunks of 50
   for (let i = 0; i < SEED_STATIONS.length; i += 50) {
     const chunk = SEED_STATIONS.slice(i, i + 50);
-    const { error } = await supabase.from("stations").upsert(
+    let { error } = await supabase.from("stations").upsert(
       chunk.map((s) => ({
         station_code: s.station_code,
         station_name: s.station_name,
@@ -261,6 +290,26 @@ export async function seedNetworkData(
       })),
       { onConflict: "station_code" },
     );
+
+    // Fallback: If database doesn't have latitude/longitude columns yet, insert basic station info
+    if (
+      error &&
+      (error.message.includes("latitude") ||
+        error.message.includes("column") ||
+        error.message.includes("schema cache"))
+    ) {
+      console.warn("Stations table missing latitude column, inserting base fields:", error.message);
+      const fallbackRes = await supabase.from("stations").upsert(
+        chunk.map((s) => ({
+          station_code: s.station_code,
+          station_name: s.station_name,
+          city: s.city,
+        })),
+        { onConflict: "station_code" },
+      );
+      error = fallbackRes.error;
+    }
+
     if (error) throw new Error(`Station seed failed: ${error.message}`);
   }
 
@@ -302,7 +351,7 @@ export async function seedNetworkData(
 
   const trainMap = new Map((allTrains ?? []).map((t) => [t.train_number, t]));
 
-  // 4. Upsert train_stops (Timetable)
+  // 4. Upsert train_stops (Timetable) if table exists
   onProgress?.("Creating timetable stops for live tracking...");
   const stopRows: any[] = [];
   for (const st of SEED_TRAINS) {
@@ -331,7 +380,14 @@ export async function seedNetworkData(
   }
 
   if (stopRows.length > 0) {
-    await supabase.from("train_stops").upsert(stopRows, { onConflict: "train_id,stop_order" });
+    try {
+      const { error: stopsErr } = await supabase
+        .from("train_stops")
+        .upsert(stopRows, { onConflict: "train_id,stop_order" });
+      if (stopsErr) console.warn("train_stops table skipped:", stopsErr.message);
+    } catch (e) {
+      console.warn("train_stops error:", e);
+    }
   }
 
   // 5. Generate schedules for 14 days
@@ -365,7 +421,14 @@ export async function seedNetworkData(
 
   for (let i = 0; i < scheduleRows.length; i += 100) {
     const chunk = scheduleRows.slice(i, i + 100);
-    await supabase.from("schedules").upsert(chunk, { onConflict: "train_id,journey_date,travel_class" });
+    try {
+      const { error: schedErr } = await supabase
+        .from("schedules")
+        .upsert(chunk, { onConflict: "train_id,journey_date,travel_class" });
+      if (schedErr) console.warn("Schedule chunk notice:", schedErr.message);
+    } catch (e) {
+      console.warn("Schedule chunk exception:", e);
+    }
   }
 
   onProgress?.("Seeding complete!");
