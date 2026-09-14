@@ -6,6 +6,8 @@ dist-ssr
 .vinxi
 .tanstack
 tsconfig.tsbuildinfo
+backend/target/
+target/
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules

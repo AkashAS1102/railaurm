@@ -1,6 +1,5 @@
-fix: restore active Supabase key and fix demo sign-in flow
+chore: add Dockerfile and Render deployment config for Java backend
 
-- Restored real Supabase publishable key (sb_publishable_nfBRMM0mIPJhrfFCunSDlg_Gh4HDa_Y)
-- Configured client.ts customFetch to handle opaque sb_publishable_* keys without invalid Bearer authorization
-- Updated demo.functions.ts to use confirmed demo accounts (demo@railaurum.app and admin@railaurum.app)
-- Verified end-to-end login, station retrieval, and booking queries
+- Add multi-stage Dockerfile for Maven build and lightweight JRE runtime
+- Update render.yaml with Docker runtime definition and environment variables
+- Ignore Maven target/ directory in .gitignore

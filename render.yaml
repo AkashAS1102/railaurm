@@ -1,18 +1,25 @@
 services:
   - type: web
     name: railaurum-backend
-    runtime: node
-    region: singapore   # change to your nearest region
+    runtime: docker
+    region: singapore   # change to your nearest region (e.g., oregon, frankfurt)
     plan: free
     rootDir: backend
-    buildCommand: npm install
-    startCommand: npm start
+    dockerfilePath: Dockerfile
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: PORT
+        value: 8080
+      - key: SPRING_DATASOURCE_URL
+        sync: false   # e.g., jdbc:postgresql://db.jdhmgnoigrgndeqjlafs.supabase.co:5432/postgres
+      - key: SPRING_DATASOURCE_USERNAME
+        value: postgres
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false   # your Supabase DB password
       - key: SUPABASE_URL
-        sync: false   # set manually in Render dashboard
+        value: https://jdhmgnoigrgndeqjlafs.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false   # set manually in Render dashboard — keep secret!
+        sync: false   # from Supabase Project Settings -> API
+      - key: SUPABASE_JWT_SECRET
+        sync: false   # from Supabase Project Settings -> API
       - key: FRONTEND_URL
-        sync: false   # your Vercel deployment URL
+        sync: false   # your Vercel deployment URL (e.g. https://railaurum.vercel.app)
