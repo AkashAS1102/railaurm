@@ -144,17 +144,42 @@ function LivePage() {
 
               {(stations.data ?? []).map((s) => {
                 const on = stationId === s.id;
+                const isMajor = [
+                  "NDLS", "CSMT", "BCT", "HWH", "MAS", "SBC", "HYB", "SC", "PUNE", "ADI",
+                  "JP", "LKO", "CNB", "BSB", "PNBE", "GHY", "ERS", "TVC", "BPL", "NGP",
+                  "JAT", "CDG", "RNC", "BBS", "VSKP", "SUR", "UBL", "MAO", "DBRG", "AGTL"
+                ].includes(s.station_code);
+                const showLabel = on || isMajor;
+
                 return (
-                  <g key={s.id} onClick={() => setStationId(on ? null : s.id)} style={{ cursor: "pointer" }}>
-                    <circle cx={px(Number(s.longitude))} cy={py(Number(s.latitude))} r={on ? 13 : 8}
-                      className={on ? "fill-gold/35" : "fill-transparent"} />
-                    <circle cx={px(Number(s.longitude))} cy={py(Number(s.latitude))} r={on ? 7 : 4}
-                      className={on ? "fill-gold" : "fill-primary/70"} />
-                    <text x={px(Number(s.longitude)) + 9} y={py(Number(s.latitude)) + 4}
-                      className={on ? "fill-foreground font-semibold" : "fill-muted-foreground"}
-                      style={{ fontSize: 14 }}>
-                      {s.station_code}
-                    </text>
+                  <g
+                    key={s.id}
+                    onClick={() => setStationId(on ? null : s.id)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <title>{`${s.station_name} (${s.station_code}) — ${s.city}`}</title>
+                    <circle
+                      cx={px(Number(s.longitude))}
+                      cy={py(Number(s.latitude))}
+                      r={on ? 12 : showLabel ? 6 : 3.5}
+                      className={on ? "fill-gold/35" : "fill-transparent"}
+                    />
+                    <circle
+                      cx={px(Number(s.longitude))}
+                      cy={py(Number(s.latitude))}
+                      r={on ? 6 : showLabel ? 4 : 2.5}
+                      className={on ? "fill-gold" : showLabel ? "fill-gold/90" : "fill-primary/60"}
+                    />
+                    {showLabel && (
+                      <text
+                        x={px(Number(s.longitude)) + 7}
+                        y={py(Number(s.latitude)) + 3.5}
+                        className={on ? "fill-foreground font-bold" : "fill-muted-foreground font-medium"}
+                        style={{ fontSize: on ? 13 : 10 }}
+                      >
+                        {s.station_code}
+                      </text>
+                    )}
                   </g>
                 );
               })}
@@ -164,15 +189,19 @@ function LivePage() {
                 const y = py(pos.lat);
                 const on = selected === run.scheduleId;
                 return (
-                  <g key={run.scheduleId}
+                  <g
+                    key={run.scheduleId}
                     onMouseEnter={() => setSelected(run.scheduleId)}
                     onMouseLeave={() => setSelected(null)}
-                    style={{ cursor: "pointer" }}>
+                    onClick={() => setSelected(run.scheduleId)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <title>{`${run.trainNumber} ${run.trainName} (${run.from.code} → ${run.to.code})`}</title>
                     <circle cx={x} cy={y} r={on ? 15 : 9} className="fill-gold/25" />
                     <circle cx={x} cy={y} r={on ? 7 : 5} className="fill-gold stroke-primary" strokeWidth={1.5} />
                     {on && (
-                      <text x={x + 14} y={y - 9} className="fill-foreground" style={{ fontSize: 18 }}>
-                        {run.trainNumber}
+                      <text x={x + 10} y={y - 8} className="fill-foreground font-semibold" style={{ fontSize: 13 }}>
+                        {run.trainNumber} · {run.trainName}
                       </text>
                     )}
                   </g>

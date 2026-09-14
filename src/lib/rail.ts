@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { SEED_STATIONS } from "./seedData";
 
 export type Station = {
   id: string;
@@ -31,6 +32,9 @@ export const CLASSES = [
   { code: "SL", label: "Sleeper" },
   { code: "3A", label: "AC 3 Tier" },
   { code: "2A", label: "AC 2 Tier" },
+  { code: "1A", label: "AC First Class" },
+  { code: "CC", label: "AC Chair Car" },
+  { code: "EC", label: "Executive Chair Car" },
 ] as const;
 
 const TRAIN_SELECT = `id, journey_date, departure_time, arrival_time, travel_class, fare, available_seats,
@@ -40,18 +44,12 @@ const TRAIN_SELECT = `id, journey_date, departure_time, arrival_time, travel_cla
     destination:stations!trains_destination_station_id_fkey ( id, station_code, station_name, city )
   )`;
 
-export const DEFAULT_STATIONS: Station[] = [
-  { id: "s1", station_code: "NDLS", station_name: "New Delhi", city: "Delhi" },
-  { id: "s2", station_code: "BCT", station_name: "Mumbai Central", city: "Mumbai" },
-  { id: "s3", station_code: "HWH", station_name: "Howrah Junction", city: "Kolkata" },
-  { id: "s4", station_code: "MAS", station_name: "Chennai Central", city: "Chennai" },
-  { id: "s5", station_code: "SBC", station_name: "KSR Bengaluru", city: "Bengaluru" },
-  { id: "s6", station_code: "HYB", station_name: "Hyderabad Deccan", city: "Hyderabad" },
-  { id: "s7", station_code: "PUNE", station_name: "Pune Junction", city: "Pune" },
-  { id: "s8", station_code: "ADI", station_name: "Ahmedabad Junction", city: "Ahmedabad" },
-  { id: "s9", station_code: "JP", station_name: "Jaipur Junction", city: "Jaipur" },
-  { id: "s10", station_code: "LKO", station_name: "Lucknow Charbagh", city: "Lucknow" },
-];
+export const DEFAULT_STATIONS: Station[] = SEED_STATIONS.map((s, i) => ({
+  id: `fallback-st-${i}`,
+  station_code: s.station_code,
+  station_name: s.station_name,
+  city: s.city,
+}));
 
 export async function fetchStations(): Promise<Station[]> {
   try {
@@ -264,28 +262,40 @@ export type LiveRun = {
 const clock = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 
 export async function fetchLiveRuns(): Promise<LiveRun[]> {
-  const { data, error } = await supabase
-    .from("schedules")
-    .select(
-      `id, departure_time, arrival_time, fare, available_seats,
-       trains!inner (
-         train_number, train_name,
-         train_stops ( stop_order, arrival_time, departure_time, day_offset, distance_km,
-           stations ( id, station_code, station_name, city, latitude, longitude ) )
-       )`,
-    )
-    .eq("journey_date", todayISO())
-    .eq("travel_class", "SL")
-    .order("departure_time");
-  if (error) throw new Error(error.message);
+  try {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select(
+        `id, departure_time, arrival_time, fare, available_seats, travel_class,
+         trains!inner (
+           id, train_number, train_name,
+           source:stations!trains_source_station_id_fkey ( id, station_code, station_name, city, latitude, longitude ),
+           destination:stations!trains_destination_station_id_fkey ( id, station_code, station_name, city, latitude, longitude ),
+           train_stops ( stop_order, arrival_time, departure_time, day_offset, distance_km,
+             stations ( id, station_code, station_name, city, latitude, longitude ) )
+         )`,
+      )
+      .eq("journey_date", todayISO())
+      .order("departure_time");
 
-  type RawStop = {
-    stop_order: number;
-    arrival_time: string | null;
-    departure_time: string | null;
-    day_offset: number;
-    distance_km: number;
-    stations: {
+    if (error) throw new Error(error.message);
+
+    type RawStop = {
+      stop_order: number;
+      arrival_time: string | null;
+      departure_time: string | null;
+      day_offset: number;
+      distance_km: number;
+      stations: {
+        id: string;
+        station_code: string;
+        station_name: string;
+        city: string;
+        latitude: number | null;
+        longitude: number | null;
+      } | null;
+    };
+    type StationRef = {
       id: string;
       station_code: string;
       station_name: string;
@@ -293,67 +303,148 @@ export async function fetchLiveRuns(): Promise<LiveRun[]> {
       latitude: number | null;
       longitude: number | null;
     };
-  };
-  type Row = {
-    id: string;
-    departure_time: string;
-    arrival_time: string;
-    fare: number;
-    available_seats: number;
-    trains: { train_number: string; train_name: string; train_stops: RawStop[] };
-  };
+    type Row = {
+      id: string;
+      departure_time: string;
+      arrival_time: string;
+      travel_class: string;
+      fare: number;
+      available_seats: number;
+      trains: {
+        id: string;
+        train_number: string;
+        train_name: string;
+        source: StationRef | null;
+        destination: StationRef | null;
+        train_stops: RawStop[] | null;
+      };
+    };
 
-  const runs: LiveRun[] = [];
-  for (const row of (data ?? []) as unknown as Row[]) {
-    const raw = [...(row.trains.train_stops ?? [])].sort((a, b) => a.stop_order - b.stop_order);
-    if (raw.length < 2) continue;
-    const originDep = raw[0]?.departure_time;
-    if (!originDep) continue;
-    const zero = clock(originDep);
+    const seenTrains = new Set<string>();
+    const runs: LiveRun[] = [];
 
-    const stops: StopPoint[] = raw
-      .filter((s) => s.stations?.latitude != null && s.stations?.longitude != null)
-      .map((s) => ({
-        stationId: s.stations.id,
-        code: s.stations.station_code,
-        name: s.stations.station_name,
-        city: s.stations.city,
-        lat: Number(s.stations.latitude),
-        lng: Number(s.stations.longitude),
-        arrival: s.arrival_time,
-        departure: s.departure_time,
-        arriveAt: s.arrival_time ? s.day_offset * 1440 + clock(s.arrival_time) - zero : null,
-        departAt: s.departure_time ? s.day_offset * 1440 + clock(s.departure_time) - zero : null,
-        km: s.distance_km,
-      }));
-    if (stops.length < 2) continue;
+    for (const row of (data ?? []) as unknown as Row[]) {
+      if (seenTrains.has(row.trains.train_number)) continue;
+      seenTrains.add(row.trains.train_number);
 
-    const from = stops[0]!;
-    const to = stops[stops.length - 1]!;
-    runs.push({
-      scheduleId: row.id,
-      trainNumber: row.trains.train_number,
-      trainName: row.trains.train_name,
-      fare: Number(row.fare),
-      seats: row.available_seats,
-      departure: row.departure_time,
-      arrival: row.arrival_time,
-      stops,
-      from,
-      to,
-      duration: to.arriveAt ?? 0,
-    });
+      const rawStops = [...(row.trains.train_stops ?? [])].sort(
+        (a, b) => a.stop_order - b.stop_order,
+      );
+
+      let stops: StopPoint[] = [];
+
+      if (rawStops.length >= 2) {
+        const originDep = rawStops[0]?.departure_time ?? row.departure_time;
+        const zero = clock(originDep);
+
+        stops = rawStops
+          .filter((s) => s.stations?.latitude != null && s.stations?.longitude != null)
+          .map((s) => ({
+            stationId: s.stations!.id,
+            code: s.stations!.station_code,
+            name: s.stations!.station_name,
+            city: s.stations!.city,
+            lat: Number(s.stations!.latitude),
+            lng: Number(s.stations!.longitude),
+            arrival: s.arrival_time,
+            departure: s.departure_time,
+            arriveAt: s.arrival_time ? s.day_offset * 1440 + clock(s.arrival_time) - zero : null,
+            departAt: s.departure_time ? s.day_offset * 1440 + clock(s.departure_time) - zero : null,
+            km: s.distance_km,
+          }));
+      }
+
+      // Fallback: If train_stops has < 2 points, use train source & destination stations
+      if (
+        stops.length < 2 &&
+        row.trains.source?.latitude != null &&
+        row.trains.destination?.latitude != null
+      ) {
+        const depClock = clock(row.departure_time);
+        let arrClock = clock(row.arrival_time);
+        if (arrClock <= depClock) arrClock += 1440;
+        const runMins = arrClock - depClock;
+
+        stops = [
+          {
+            stationId: row.trains.source.id,
+            code: row.trains.source.station_code,
+            name: row.trains.source.station_name,
+            city: row.trains.source.city,
+            lat: Number(row.trains.source.latitude),
+            lng: Number(row.trains.source.longitude),
+            arrival: null,
+            departure: row.departure_time,
+            arriveAt: 0,
+            departAt: 0,
+            km: 0,
+          },
+          {
+            stationId: row.trains.destination.id,
+            code: row.trains.destination.station_code,
+            name: row.trains.destination.station_name,
+            city: row.trains.destination.city,
+            lat: Number(row.trains.destination.latitude),
+            lng: Number(row.trains.destination.longitude),
+            arrival: row.arrival_time,
+            departure: null,
+            arriveAt: runMins,
+            departAt: runMins,
+            km: 800,
+          },
+        ];
+      }
+
+      if (stops.length < 2) continue;
+
+      const from = stops[0]!;
+      const to = stops[stops.length - 1]!;
+      const duration = to.arriveAt ?? 0;
+
+      runs.push({
+        scheduleId: row.id,
+        trainNumber: row.trains.train_number,
+        trainName: row.trains.train_name,
+        fare: Number(row.fare),
+        seats: row.available_seats,
+        departure: row.departure_time,
+        arrival: row.arrival_time,
+        stops,
+        from,
+        to,
+        duration: duration > 0 ? duration : 480,
+      });
+    }
+
+    return runs;
+  } catch (err) {
+    console.warn("Could not fetch live runs:", err);
+    return [];
   }
-  return runs;
 }
 
 export async function fetchGeoStations(): Promise<GeoStation[]> {
-  const { data, error } = await supabase
-    .from("stations")
-    .select("id, station_code, station_name, city, latitude, longitude")
-    .order("station_name");
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as GeoStation[]).filter((s) => s.latitude != null);
+  try {
+    const { data, error } = await supabase
+      .from("stations")
+      .select("id, station_code, station_name, city, latitude, longitude")
+      .order("station_name");
+    if (!error && data && data.length > 0) {
+      const valid = ((data ?? []) as unknown as GeoStation[]).filter((s) => s.latitude != null);
+      if (valid.length > 0) return valid;
+    }
+  } catch (err) {
+    console.warn("Could not fetch geo stations from DB, using defaults:", err);
+  }
+
+  return SEED_STATIONS.map((s, idx) => ({
+    id: `geo-s-${idx}`,
+    station_code: s.station_code,
+    station_name: s.station_name,
+    city: s.city,
+    latitude: s.latitude,
+    longitude: s.longitude,
+  }));
 }
 
 export type RunPosition = {
