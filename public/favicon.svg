@@ -1,14 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <!-- Dark Background -->
-  <rect width="256" height="256" fill="#18181b" rx="56" />
-  <!-- Gold Train Icon -->
-  <g transform="translate(44, 44) scale(7)" stroke="#d4af37" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M8 3.1c-3.1.2-5.4 2.8-5.4 5.9v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-3.1-2.3-5.7-5.4-5.9" />
-    <path d="M2 16h20" />
-    <path d="m8 21-2 2" />
-    <path d="m16 21 2 2" />
-    <circle cx="9" cy="18" r="1" fill="#d4af37" />
-    <circle cx="15" cy="18" r="1" fill="#d4af37" />
-    <rect width="10" height="6" x="7" y="7" rx="1" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0a1128" />
+      <stop offset="100%" stopColor="#1c2541" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#fcd34d" />
+      <stop offset="50%" stopColor="#f59e0b" />
+      <stop offset="100%" stopColor="#d97706" />
+    </linearGradient>
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#38bdf8" stop-opacity="0.8" />
+      <stop offset="100%" stopColor="#0284c7" stop-opacity="0.9" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Circle Badge -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="url(#goldGrad)" stroke-width="12" stroke-opacity="0.4" />
+
+  <!-- Railway Tracks in Perspective -->
+  <g stroke="url(#goldGrad)" stroke-width="10" stroke-linecap="round">
+    <!-- Left & Right Rails -->
+    <line x1="160" y1="440" x2="220" y2="350" />
+    <line x1="352" y1="440" x2="292" y2="350" />
+    <!-- Track Sleepers / Ties -->
+    <line x1="130" y1="440" x2="382" y2="440" stroke-width="14" />
+    <line x1="168" y1="400" x2="344" y2="400" stroke-width="12" />
+    <line x1="202" y1="365" x2="310" y2="365" stroke-width="10" />
   </g>
+
+  <!-- Main Train Locomotive Body -->
+  <!-- Top Roof Dome -->
+  <path d="M 176 170 C 176 110, 336 110, 336 170 Z" fill="url(#goldGrad)" />
+  <!-- Pantograph on top -->
+  <path d="M 230 115 L 256 80 L 282 115 M 220 80 L 292 80" fill="none" stroke="url(#goldGrad)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Main Cabin Shell -->
+  <rect x="156" y="160" width="200" height="175" rx="32" fill="url(#goldGrad)" />
+  <!-- Front Accent Panel -->
+  <rect x="172" y="170" width="168" height="155" rx="24" fill="#0f172a" />
+
+  <!-- Windshield / Drivers Window -->
+  <path d="M 188 185 C 188 185, 256 178, 324 185 L 324 235 C 324 240, 318 245, 310 245 L 202 245 C 194 245, 188 240, 188 235 Z" fill="url(#glassGrad)" />
+  <!-- Window Center Divider -->
+  <line x1="256" y1="182" x2="256" y2="245" stroke="#0f172a" stroke-width="6" />
+
+  <!-- Front Grill / Cowcatcher -->
+  <path d="M 196 265 L 316 265 M 204 280 L 308 280 M 216 295 L 296 295" stroke="url(#goldGrad)" stroke-width="6" stroke-linecap="round" />
+
+  <!-- High-Beam Headlights -->
+  <circle cx="196" cy="272" r="14" fill="#ffffff" stroke="url(#goldGrad)" stroke-width="4" />
+  <circle cx="316" cy="272" r="14" fill="#ffffff" stroke="url(#goldGrad)" stroke-width="4" />
+
+  <!-- Top Center Marker Light -->
+  <circle cx="256" cy="148" r="10" fill="#ffffff" stroke="#0f172a" stroke-width="3" />
+
+  <!-- Lower Base Plate / Buffer -->
+  <rect x="140" y="325" width="232" height="24" rx="8" fill="url(#goldGrad)" />
+  <circle cx="170" cy="337" r="8" fill="#0f172a" />
+  <circle cx="342" cy="337" r="8" fill="#0f172a" />
 </svg>
