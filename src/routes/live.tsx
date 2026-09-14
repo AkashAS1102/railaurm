@@ -22,15 +22,13 @@ export const Route = createFileRoute("/live")({
 
 import { INDIA_BOUNDARY } from "@/lib/indiaOutline";
 
-/* Equirectangular projection tuned accurately to the Indian subcontinent. */
-const LNG_MIN = 68.0;
-const LNG_MAX = 97.5;
-const LAT_MIN = 7.5;
-const LAT_MAX = 36.5;
-const W = 1000;
-const H = 1000;
-const px = (lng: number) => ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * W;
-const py = (lat: number) => ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * H;
+/* Equirectangular projection calibrated to the Survey of India national boundary */
+const LNG_MIN = 67.5;
+const LNG_MAX = 98.0;
+const LAT_MIN = 7.0;
+const LAT_MAX = 37.6;
+const px = (lng: number) => 50 + ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * 900;
+const py = (lat: number) => 30 + ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * 940;
 
 const OUTLINE_PATH =
   INDIA_BOUNDARY.map(([lng, lat], i) => `${i === 0 ? "M" : "L"}${px(lng).toFixed(1)},${py(lat).toFixed(1)}`)
