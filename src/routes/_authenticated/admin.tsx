@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShieldPlus,
   Sparkles,
+  TrainFront,
   Trash2,
   X,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import {
   saveSchedule,
   saveStation,
   saveTrain,
+  seedAllCombinations,
   seedNetworkData,
   setAdmin,
   setBookingStatus,
@@ -72,6 +74,23 @@ function AdminPage() {
     onError: (e: Error) => toast.error(`Seeding failed: ${e.message}`),
   });
 
+  const connectAll = useMutation({
+    mutationFn: () =>
+      seedAllCombinations((msg) => {
+        toast.info(msg);
+      }),
+    onSuccess: (res) => {
+      toast.success(
+        res.createdCount > 0
+          ? `Successfully connected ${res.createdCount} station combinations!`
+          : "All station combinations are already connected!",
+      );
+      qc.invalidateQueries({ queryKey: ["admin-trains"] });
+      qc.invalidateQueries({ queryKey: ["live-runs"] });
+    },
+    onError: (e: Error) => toast.error(`Connection failed: ${e.message}`),
+  });
+
   return (
     <main className="min-h-screen bg-background">
       <div className="ink-panel">
@@ -85,24 +104,45 @@ function AdminPage() {
             </p>
           </div>
           {isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={seed.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Seed 100 Indian stations and 50 trains with timetable and schedules into the database?",
-                  )
-                ) {
-                  seed.mutate();
-                }
-              }}
-              className="border-gold/50 text-gold hover:bg-gold hover:text-accent-foreground"
-            >
-              <Sparkles className="mr-1.5 size-4" />
-              {seed.isPending ? "Seeding..." : "Seed 100 Stations & 50 Trains"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={seed.isPending || connectAll.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Seed 100 Indian stations and 50 trains with timetable and schedules into the database?",
+                    )
+                  ) {
+                    seed.mutate();
+                  }
+                }}
+                className="border-gold/50 text-gold hover:bg-gold hover:text-accent-foreground"
+              >
+                <Sparkles className="mr-1.5 size-4" />
+                {seed.isPending ? "Seeding..." : "Seed 100 Stations & 50 Trains"}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={seed.isPending || connectAll.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Connect all station combinations with direct express trains in the database?",
+                    )
+                  ) {
+                    connectAll.mutate();
+                  }
+                }}
+                className="border-gold/50 text-gold hover:bg-gold hover:text-accent-foreground"
+              >
+                <TrainFront className="mr-1.5 size-4" />
+                {connectAll.isPending ? "Connecting..." : "Connect All Combinations"}
+              </Button>
+            </div>
           )}
         </div>
       </div>

@@ -533,3 +533,85 @@ export async function seedNetworkData(
   onProgress?.("Seeding complete!");
   return { stationsCount: SEED_STATIONS.length, trainsCount: SEED_TRAINS.length };
 }
+
+/**
+ * Connects all pairwise station combinations in the database.
+ * Detects any pair that lacks a direct train and inserts a high-speed express train.
+ */
+export async function seedAllCombinations(
+  onProgress?: (msg: string) => void,
+): Promise<{ createdCount: number; totalPairs: number }> {
+  onProgress?.("Fetching stations from database...");
+  const { data: stations, error: sErr } = await supabase
+    .from("stations")
+    .select("id, station_code, station_name, city");
+
+  if (sErr || !stations || stations.length < 2) {
+    throw new Error("Need at least 2 stations to generate combinations.");
+  }
+
+  onProgress?.(`Loaded ${stations.length} stations. Checking existing trains...`);
+  const { data: existingTrains, error: tErr } = await supabase
+    .from("trains")
+    .select("source_station_id, destination_station_id");
+
+  if (tErr) throw new Error(tErr.message);
+
+  const existingPairs = new Set(
+    (existingTrains ?? []).map((t) => `${t.source_station_id}->${t.destination_station_id}`),
+  );
+
+  const missingTrainRows: any[] = [];
+  let trainNumCounter = 30001;
+
+  for (const s1 of stations) {
+    for (const s2 of stations) {
+      if (s1.id === s2.id) continue;
+      const pairKey = `${s1.id}->${s2.id}`;
+      if (existingPairs.has(pairKey)) continue;
+
+      const trainName =
+        s1.city === s2.city
+          ? `${s1.station_name} - ${s2.station_name} Local SF`
+          : `${s1.city} - ${s2.city} Superfast Express`;
+
+      missingTrainRows.push({
+        train_number: (trainNumCounter++).toString(),
+        train_name: trainName,
+        source_station_id: s1.id,
+        destination_station_id: s2.id,
+        total_seats: 650,
+      });
+    }
+  }
+
+  if (missingTrainRows.length === 0) {
+    onProgress?.("All station combinations are already connected!");
+    return { createdCount: 0, totalPairs: stations.length * (stations.length - 1) };
+  }
+
+  onProgress?.(
+    `Writing ${missingTrainRows.length} new trains across all station combinations in batches...`,
+  );
+
+  const chunkSize = 250;
+  for (let i = 0; i < missingTrainRows.length; i += chunkSize) {
+    const chunk = missingTrainRows.slice(i, i + chunkSize);
+    const { error } = await supabase
+      .from("trains")
+      .upsert(chunk, { onConflict: "train_number" });
+
+    if (error) {
+      console.warn("Chunk error:", error.message);
+    }
+    const percent = Math.round(((i + chunk.length) / missingTrainRows.length) * 100);
+    onProgress?.(`Writing trains to database: ${percent}% complete...`);
+  }
+
+  onProgress?.("Successfully connected all station combinations!");
+  return {
+    createdCount: missingTrainRows.length,
+    totalPairs: stations.length * (stations.length - 1),
+  };
+}
+

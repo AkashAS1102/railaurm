@@ -6,6 +6,8 @@ export type Station = {
   station_code: string;
   station_name: string;
   city: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type TrainRef = {
@@ -40,8 +42,8 @@ export const CLASSES = [
 const TRAIN_SELECT = `id, journey_date, departure_time, arrival_time, travel_class, fare, available_seats,
   trains!inner (
     id, train_number, train_name, total_seats, source_station_id, destination_station_id,
-    source:stations!trains_source_station_id_fkey ( id, station_code, station_name, city ),
-    destination:stations!trains_destination_station_id_fkey ( id, station_code, station_name, city )
+    source:stations!trains_source_station_id_fkey ( id, station_code, station_name, city, latitude, longitude ),
+    destination:stations!trains_destination_station_id_fkey ( id, station_code, station_name, city, latitude, longitude )
   )`;
 
 export const DEFAULT_STATIONS: Station[] = SEED_STATIONS.map((s, i) => ({
@@ -49,13 +51,15 @@ export const DEFAULT_STATIONS: Station[] = SEED_STATIONS.map((s, i) => ({
   station_code: s.station_code,
   station_name: s.station_name,
   city: s.city,
+  latitude: s.latitude,
+  longitude: s.longitude,
 }));
 
 export async function fetchStations(): Promise<Station[]> {
   try {
     const { data, error } = await supabase
       .from("stations")
-      .select("id, station_code, station_name, city")
+      .select("id, station_code, station_name, city, latitude, longitude")
       .order("station_name");
     if (!error && data && data.length > 0) {
       return data as Station[];
@@ -66,32 +70,196 @@ export async function fetchStations(): Promise<Station[]> {
   return DEFAULT_STATIONS;
 }
 
+// In-memory cache for generated routes
+const syntheticScheduleCache = new Map<string, ScheduleResult>();
+
+function calculateStationDist(
+  s1?: { latitude?: number | null; longitude?: number | null } | null,
+  s2?: { latitude?: number | null; longitude?: number | null } | null,
+): number {
+  if (!s1?.latitude || !s1?.longitude || !s2?.latitude || !s2?.longitude) return 650;
+  const dLat = ((s2.latitude - s1.latitude) * Math.PI) / 180;
+  const dLon = ((s2.longitude - s1.longitude) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((s1.latitude * Math.PI) / 180) *
+      Math.cos((s2.latitude * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const dist = Math.round(6371 * c);
+  return Math.max(40, dist);
+}
+
+function calculateDynamicFare(cls: string, distanceKm: number): number {
+  switch (cls) {
+    case "SL":
+      return Math.round(140 + distanceKm * 0.48);
+    case "3A":
+      return Math.round(420 + distanceKm * 1.18);
+    case "2A":
+      return Math.round(620 + distanceKm * 1.68);
+    case "1A":
+      return Math.round(1050 + distanceKm * 2.85);
+    case "CC":
+      return Math.round(360 + distanceKm * 0.98);
+    case "EC":
+      return Math.round(720 + distanceKm * 1.95);
+    default:
+      return Math.round(250 + distanceKm * 0.6);
+  }
+}
+
+function generateDeterministicTimings(codeA: string, codeB: string, distanceKm: number) {
+  const durMins = Math.max(60, Math.round((distanceKm / 70) * 60 + 30));
+  let hash = 0;
+  const key = `${codeA}-${codeB}`;
+  for (let i = 0; i < key.length; i++) hash = (hash << 5) - hash + key.charCodeAt(i);
+  const depHour = 5 + (Math.abs(hash) % 17); // 05:00 - 21:00
+  const depMin = (Math.abs(hash) % 4) * 15;
+
+  const depTime = `${String(depHour).padStart(2, "0")}:${String(depMin).padStart(2, "0")}:00`;
+  const arrTotal = depHour * 60 + depMin + durMins;
+  const arrHour = Math.floor(arrTotal / 60) % 24;
+  const arrMin = arrTotal % 60;
+  const arrTime = `${String(arrHour).padStart(2, "0")}:${String(arrMin).padStart(2, "0")}:00`;
+
+  return { depTime, arrTime, durMins, trainNum: String(30000 + (Math.abs(hash) % 65000)) };
+}
+
 export async function searchSchedules(params: {
   from: string;
   to: string;
   date: string;
   cls: string;
 }): Promise<ScheduleResult[]> {
-  const { data, error } = await supabase
-    .from("schedules")
-    .select(TRAIN_SELECT)
-    .eq("journey_date", params.date)
-    .eq("travel_class", params.cls)
-    .eq("trains.source_station_id", params.from)
-    .eq("trains.destination_station_id", params.to)
-    .order("departure_time");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as ScheduleResult[];
+  // Step 1: Direct database lookup
+  try {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select(TRAIN_SELECT)
+      .eq("journey_date", params.date)
+      .eq("travel_class", params.cls)
+      .eq("trains.source_station_id", params.from)
+      .eq("trains.destination_station_id", params.to)
+      .order("departure_time");
+
+    if (!error && data && data.length > 0) {
+      return data as unknown as ScheduleResult[];
+    }
+  } catch (err) {
+    console.warn("Direct schedule search failed, checking provisioner:", err);
+  }
+
+  // Step 2: On-demand RPC provisioner (runs inside PostgreSQL with SECURITY DEFINER)
+  try {
+    const { error: rpcErr } = await (supabase.rpc as any)("ensure_train_schedule", {
+      p_source_id: params.from,
+      p_dest_id: params.to,
+      p_date: params.date,
+      p_cls: params.cls,
+    });
+
+    if (!rpcErr) {
+      const { data: refreshed, error: refErr } = await supabase
+        .from("schedules")
+        .select(TRAIN_SELECT)
+        .eq("journey_date", params.date)
+        .eq("travel_class", params.cls)
+        .eq("trains.source_station_id", params.from)
+        .eq("trains.destination_station_id", params.to)
+        .order("departure_time");
+
+      if (!refErr && refreshed && refreshed.length > 0) {
+        return refreshed as unknown as ScheduleResult[];
+      }
+    } else {
+      console.warn("ensure_train_schedule notice:", rpcErr.message);
+    }
+  } catch (err) {
+    console.warn("ensure_train_schedule exception:", err);
+  }
+
+  // Step 3: Resilient client synthesis so the user ALWAYS has a train for every combination
+  const allStations = await fetchStations();
+  const src =
+    allStations.find((s) => s.id === params.from || s.station_code === params.from) ??
+    SEED_STATIONS.find((s) => s.station_code === params.from);
+  const dst =
+    allStations.find((s) => s.id === params.to || s.station_code === params.to) ??
+    SEED_STATIONS.find((s) => s.station_code === params.to);
+
+  if (src && dst) {
+    const dist = calculateStationDist(src, dst);
+    const timings = generateDeterministicTimings(src.station_code, dst.station_code, dist);
+    const fare = calculateDynamicFare(params.cls, dist);
+
+    const synthId = `synthetic-${src.station_code}-${dst.station_code}-${params.date}-${params.cls}`;
+    const trainName =
+      src.city === dst.city
+        ? `${src.station_name} - ${dst.station_name} Local SF`
+        : `${src.city} - ${dst.city} Superfast Express`;
+
+    const syntheticResult: ScheduleResult = {
+      id: synthId,
+      journey_date: params.date,
+      departure_time: timings.depTime,
+      arrival_time: timings.arrTime,
+      travel_class: params.cls,
+      fare,
+      available_seats: 120,
+      trains: {
+        id: `train-${timings.trainNum}`,
+        train_number: timings.trainNum,
+        train_name: trainName,
+        total_seats: 650,
+        source: {
+          id: (src as any).id ?? `st-${src.station_code}`,
+          station_code: src.station_code,
+          station_name: src.station_name,
+          city: src.city,
+          latitude: src.latitude,
+          longitude: src.longitude,
+        },
+        destination: {
+          id: (dst as any).id ?? `st-${dst.station_code}`,
+          station_code: dst.station_code,
+          station_name: dst.station_name,
+          city: dst.city,
+          latitude: dst.latitude,
+          longitude: dst.longitude,
+        },
+      },
+    };
+
+    syntheticScheduleCache.set(synthId, syntheticResult);
+    return [syntheticResult];
+  }
+
+  return [];
 }
 
 export async function fetchSchedule(id: string): Promise<ScheduleResult | null> {
-  const { data, error } = await supabase
-    .from("schedules")
-    .select(TRAIN_SELECT)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as unknown as ScheduleResult) ?? null;
+  // Check in-memory synthetic cache first for instant resolution
+  if (syntheticScheduleCache.has(id)) {
+    return syntheticScheduleCache.get(id)!;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select(TRAIN_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as unknown as ScheduleResult;
+    }
+  } catch (err) {
+    console.warn("fetchSchedule error:", err);
+  }
+
+  return syntheticScheduleCache.get(id) ?? null;
 }
 
 export type PassengerInput = { name: string; age: number; gender: string };
@@ -100,11 +268,67 @@ export type PaymentIntent = { payment_id: string; amount: number; reference: str
 
 /** Creates a pending payment for the journey and returns the amount to collect. */
 export async function startPayment(scheduleId: string, seats: number): Promise<PaymentIntent> {
+  let targetScheduleId = scheduleId;
+
+  if (targetScheduleId.startsWith("synthetic-")) {
+    const parts = targetScheduleId.split("-");
+    // Format: synthetic - SRC - DST - YYYY - MM - DD - CLS
+    if (parts.length >= 7) {
+      const srcCode = parts[1];
+      const dstCode = parts[2];
+      const date = `${parts[3]}-${parts[4]}-${parts[5]}`;
+      const cls = parts[6];
+
+      try {
+        const { data: stData } = await supabase
+          .from("stations")
+          .select("id, station_code")
+          .in("station_code", [srcCode, dstCode]);
+
+        const srcSt = stData?.find((s) => s.station_code === srcCode);
+        const dstSt = stData?.find((s) => s.station_code === dstCode);
+
+        if (srcSt && dstSt) {
+          await (supabase.rpc as any)("ensure_train_schedule", {
+            p_source_id: srcSt.id,
+            p_dest_id: dstSt.id,
+            p_date: date,
+            p_cls: cls,
+          });
+
+          const { data: realSched } = await supabase
+            .from("schedules")
+            .select("id")
+            .eq("journey_date", date)
+            .eq("travel_class", cls)
+            .eq("trains.source_station_id", srcSt.id)
+            .eq("trains.destination_station_id", dstSt.id)
+            .maybeSingle();
+
+          if (realSched?.id) {
+            targetScheduleId = realSched.id;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not auto-promote synthetic schedule:", e);
+      }
+    }
+  }
+
   const { data, error } = await supabase.rpc("start_payment", {
-    p_schedule_id: scheduleId,
+    p_schedule_id: targetScheduleId,
     p_seats: seats,
   });
-  if (error) throw new Error(friendlyError(error.message));
+
+  if (error) {
+    if (targetScheduleId.startsWith("synthetic-")) {
+      throw new Error(
+        "To reserve on auto-generated trains, please execute the latest migration in your Supabase SQL editor (supabase/migrations/20260914090000_train_for_every_combination.sql), or select one of the pre-seeded flagship trains."
+      );
+    }
+    throw new Error(friendlyError(error.message));
+  }
+
   const row = (data as PaymentIntent[])[0];
   if (!row) throw new Error("Could not start the payment. Please retry.");
   return { ...row, amount: Number(row.amount) };
