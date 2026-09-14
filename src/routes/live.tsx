@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Gauge, MapPin, TrainFront, X } from "lucide-react";
+import { Gauge, MapPin, Search, TrainFront, X } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,8 @@ function LivePage() {
   const [boost, setBoost] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [stationId, setStationId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"active" | "all">("active");
 
   useEffect(() => {
     const id = window.setInterval(
@@ -62,13 +64,46 @@ function LivePage() {
     return out.sort((a, b) => b.pos.progress - a.pos.progress);
   }, [runs.data, now]);
 
+  const filteredActive = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return active;
+    return active.filter(
+      (a) =>
+        a.run.trainNumber.toLowerCase().includes(q) ||
+        a.run.trainName.toLowerCase().includes(q) ||
+        a.run.from.code.toLowerCase().includes(q) ||
+        a.run.from.city.toLowerCase().includes(q) ||
+        a.run.from.name.toLowerCase().includes(q) ||
+        a.run.to.code.toLowerCase().includes(q) ||
+        a.run.to.city.toLowerCase().includes(q) ||
+        a.run.to.name.toLowerCase().includes(q),
+    );
+  }, [active, searchQuery]);
+
+  const filteredAll = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const all = runs.data ?? [];
+    if (!q) return all;
+    return all.filter(
+      (r) =>
+        r.trainNumber.toLowerCase().includes(q) ||
+        r.trainName.toLowerCase().includes(q) ||
+        r.from.code.toLowerCase().includes(q) ||
+        r.from.city.toLowerCase().includes(q) ||
+        r.from.name.toLowerCase().includes(q) ||
+        r.to.code.toLowerCase().includes(q) ||
+        r.to.city.toLowerCase().includes(q) ||
+        r.to.name.toLowerCase().includes(q),
+    );
+  }, [runs.data, searchQuery]);
+
   const board = useMemo(() => {
     if (!stationId) return null;
     const station = (stations.data ?? []).find((s) => s.id === stationId);
     if (!station) return null;
     const calls = (runs.data ?? [])
       .map((run) => {
-        const stop = run.stops.find((s) => s.stationId === stationId);
+        const stop = run.stops.find((s) => s.stationId === stationId || s.code === station.station_code);
         return stop ? { run, stop } : null;
       })
       .filter((x): x is { run: LiveRun; stop: LiveRun["stops"][number] } => x !== null)
@@ -101,14 +136,42 @@ function LivePage() {
       <div className="mx-auto -mt-10 w-full max-w-6xl px-5 pb-20">
         <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
           <div className="surface-card overflow-hidden p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">
-                {active.length} trains en route ·{" "}
-                {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-              <Button size="sm" variant={boost ? "default" : "outline"} onClick={() => setBoost((b) => !b)}>
-                <Gauge className="size-4" /> {boost ? "Fast-forward on" : "Fast-forward"}
-              </Button>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {active.length} trains en route ·{" "}
+                  {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                {stationId && (
+                  <button
+                    onClick={() => setStationId(null)}
+                    className="flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-gold hover:bg-muted"
+                  >
+                    <span>Clear filter</span>
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={stationId ?? ""}
+                  onChange={(e) => setStationId(e.target.value || null)}
+                  className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs text-foreground outline-none transition-colors hover:border-gold focus:border-gold"
+                >
+                  <option value="">Inspect station board...</option>
+                  {(stations.data ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.station_code} — {s.station_name} ({s.city})
+                    </option>
+                  ))}
+                </select>
+
+                <Button size="sm" variant={boost ? "default" : "outline"} onClick={() => setBoost((b) => !b)}>
+                  <Gauge className="size-4" /> {boost ? "Fast-forward on" : "Fast-forward"}
+                </Button>
+              </div>
             </div>
 
             <svg
@@ -128,19 +191,32 @@ function LivePage() {
                 strokeLinejoin="round" />
 
               {/* every route drawn stop-to-stop */}
-              {(runs.data ?? []).map((r) => (
-                <polyline
-                  key={`rt-${r.scheduleId}`}
-                  points={r.stops.map((s) => `${px(s.lng).toFixed(1)},${py(s.lat).toFixed(1)}`).join(" ")}
-                  fill="none"
-                  className={
-                    selected === r.scheduleId ? "stroke-gold" : "stroke-primary/10"
-                  }
-                  strokeWidth={selected === r.scheduleId ? 3.5 : 1.2}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              ))}
+              {(runs.data ?? []).map((r) => {
+                const isSelected = selected === r.scheduleId;
+                const isStationMatch =
+                  stationId &&
+                  (r.from.stationId === stationId ||
+                    r.to.stationId === stationId ||
+                    r.stops.some((s) => s.stationId === stationId));
+
+                return (
+                  <polyline
+                    key={`rt-${r.scheduleId}`}
+                    points={r.stops.map((s) => `${px(s.lng).toFixed(1)},${py(s.lat).toFixed(1)}`).join(" ")}
+                    fill="none"
+                    className={
+                      isSelected
+                        ? "stroke-gold"
+                        : isStationMatch
+                          ? "stroke-gold/70"
+                          : "stroke-primary/20"
+                    }
+                    strokeWidth={isSelected ? 3.5 : isStationMatch ? 2 : 1.2}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
 
               {(stations.data ?? []).map((s) => {
                 const on = stationId === s.id;
@@ -162,7 +238,7 @@ function LivePage() {
                       cx={px(Number(s.longitude))}
                       cy={py(Number(s.latitude))}
                       r={on ? 12 : showLabel ? 6 : 3.5}
-                      className={on ? "fill-gold/35" : "fill-transparent"}
+                      className={on ? "fill-gold/35 animate-ping" : "fill-transparent"}
                     />
                     <circle
                       cx={px(Number(s.longitude))}
@@ -211,7 +287,10 @@ function LivePage() {
 
             {highlighted && (
               <p className="mt-3 text-xs text-muted-foreground">
-                {highlighted.run.trainNumber} {highlighted.run.trainName} —{" "}
+                <span className="font-semibold text-foreground">
+                  #{highlighted.run.trainNumber} {highlighted.run.trainName}
+                </span>{" "}
+                —{" "}
                 {highlighted.pos.atStation
                   ? `standing at ${highlighted.pos.lastStop.name}`
                   : `${highlighted.pos.lastStop.code} → ${highlighted.pos.nextStop.code}, due ${formatTime(
@@ -221,22 +300,102 @@ function LivePage() {
             )}
           </div>
 
-          <div className="surface-card max-h-[640px] overflow-y-auto p-4">
-            <h2 className="font-display text-2xl">Running now</h2>
-            {runs.isLoading ? (
-              <p className="mt-4 text-sm text-muted-foreground">Loading the network…</p>
-            ) : active.length === 0 ? (
-              <p className="mt-4 text-sm text-muted-foreground">
-                No services are between stations at this minute. Try fast-forward.
-              </p>
-            ) : (
-              <ul className="mt-4 space-y-2">
-                {active.map(({ run, pos }) => (
-                  <LiveRow key={run.scheduleId} run={run} pos={pos}
-                    active={selected === run.scheduleId} onHover={setSelected} />
-                ))}
-              </ul>
-            )}
+          <div className="surface-card flex max-h-[660px] flex-col p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-display text-2xl">Network services</h2>
+              <span className="font-mono text-xs text-muted-foreground">
+                {active.length} active / {runs.data?.length ?? 0} total
+              </span>
+            </div>
+
+            {/* Search input */}
+            <div className="relative mb-3 mt-3">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search train, station, or number..."
+                className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-8 text-sm text-foreground outline-none transition-all focus:border-gold focus:ring-2 focus:ring-gold/30"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Tab filter toggle */}
+            <div className="mb-3 flex shrink-0 gap-1.5 rounded-xl bg-secondary p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("active")}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
+                  activeTab === "active"
+                    ? "bg-card text-gold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Running Now ({filteredActive.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("all")}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
+                  activeTab === "all"
+                    ? "bg-card text-gold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All Services ({filteredAll.length})
+              </button>
+            </div>
+
+            {/* Content list */}
+            <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+              {runs.isLoading ? (
+                <p className="mt-4 text-sm text-muted-foreground">Loading the network…</p>
+              ) : activeTab === "active" ? (
+                filteredActive.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {searchQuery
+                      ? `No active trains match "${searchQuery}".`
+                      : "No services are between stations at this minute. Try fast-forward."}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {filteredActive.map(({ run, pos }) => (
+                      <LiveRow
+                        key={run.scheduleId}
+                        run={run}
+                        pos={pos}
+                        active={selected === run.scheduleId}
+                        onHover={setSelected}
+                      />
+                    ))}
+                  </ul>
+                )
+              ) : filteredAll.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {`No trains match "${searchQuery}".`}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {filteredAll.map((run) => (
+                    <AllTrainRow
+                      key={run.scheduleId}
+                      run={run}
+                      active={selected === run.scheduleId}
+                      onHover={setSelected}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
 
@@ -367,6 +526,58 @@ function LiveRow({
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-gold" style={{ width: `${Math.round(pos.progress * 100)}%` }} />
+      </div>
+    </li>
+  );
+}
+
+function AllTrainRow({
+  run,
+  active,
+  onHover,
+}: {
+  run: LiveRun;
+  active: boolean;
+  onHover: (id: string | null) => void;
+}) {
+  return (
+    <li
+      onMouseEnter={() => onHover(run.scheduleId)}
+      onMouseLeave={() => onHover(null)}
+      onClick={() => onHover(run.scheduleId)}
+      className={`cursor-pointer rounded-xl border p-3 transition-colors ${
+        active ? "border-gold bg-gold/10" : "border-border hover:border-gold/50"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <TrainFront className="size-4 text-gold" /> {run.trainName}
+        </span>
+        <span className="font-mono text-xs font-semibold text-gold">#{run.trainNumber}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {run.from.code} ({formatTime(run.departure)}) → {run.to.code} ({formatTime(run.arrival)})
+        </span>
+        <span>{minutesToHm(run.duration)}</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-1 text-xs">
+        <span className="text-muted-foreground">
+          {inr(run.fare)} · {run.seats} seats
+        </span>
+        <Link
+          to="/search"
+          search={{
+            from: run.from.stationId,
+            to: run.to.stationId,
+            date: todayISO(),
+            cls: "SL",
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="font-medium text-gold hover:underline"
+        >
+          Book route →
+        </Link>
       </div>
     </li>
   );

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { SEED_STATIONS } from "./seedData";
+import { SEED_STATIONS, SEED_TRAINS } from "./seedData";
 
 export type Station = {
   id: string;
@@ -637,6 +637,163 @@ export async function fetchLiveRuns(): Promise<LiveRun[]> {
         from,
         to,
         duration: duration > 0 ? duration : 480,
+      });
+    }
+
+    // Ensure all 50 flagship trains are mapped
+    const stMap = new Map(SEED_STATIONS.map((s) => [s.station_code, s]));
+
+    for (const t of SEED_TRAINS) {
+      if (seenTrains.has(t.train_number)) continue;
+      seenTrains.add(t.train_number);
+
+      const src = stMap.get(t.source_code);
+      const dst = stMap.get(t.destination_code);
+      if (!src || !dst) continue;
+
+      const depClock = clock(t.dep);
+      let arrClock = clock(t.arr);
+      if (arrClock <= depClock) arrClock += 1440;
+      const duration = arrClock - depClock;
+
+      const from: StopPoint = {
+        stationId: `st-${src.station_code}`,
+        code: src.station_code,
+        name: src.station_name,
+        city: src.city,
+        lat: src.latitude,
+        lng: src.longitude,
+        arrival: null,
+        departure: t.dep,
+        arriveAt: 0,
+        departAt: 0,
+        km: 0,
+      };
+
+      const to: StopPoint = {
+        stationId: `st-${dst.station_code}`,
+        code: dst.station_code,
+        name: dst.station_name,
+        city: dst.city,
+        lat: dst.latitude,
+        lng: dst.longitude,
+        arrival: t.arr,
+        departure: null,
+        arriveAt: duration,
+        departAt: duration,
+        km: 800,
+      };
+
+      runs.push({
+        scheduleId: `flagship-${t.train_number}`,
+        trainNumber: t.train_number,
+        trainName: t.train_name,
+        fare: t.base_fare,
+        seats: 420,
+        departure: t.dep,
+        arrival: t.arr,
+        stops: [from, to],
+        from,
+        to,
+        duration: duration > 0 ? duration : 480,
+      });
+    }
+
+    // Key intercity and regional trains across India with daytime runs
+    // Ensures vibrant live activity across all states at any hour
+    const REGIONAL_ACTIVE_SERVICES = [
+      { num: "12124", name: "Deccan Queen Express", src: "PUNE", dst: "CSMT", dep: "07:15", arr: "10:25", fare: 380 },
+      { num: "12123", name: "Deccan Queen Return", src: "CSMT", dst: "PUNE", dep: "17:10", arr: "20:25", fare: 380 },
+      { num: "12007", name: "Mysuru Shatabdi", src: "MAS", dst: "MYS", dep: "06:00", arr: "13:00", fare: 1040 },
+      { num: "12008", name: "Mysuru Shatabdi Return", src: "MYS", dst: "MAS", dep: "14:15", arr: "21:30", fare: 1040 },
+      { num: "12842", name: "Coromandel Express", src: "MAS", dst: "HWH", dep: "07:00", arr: "11:50", fare: 1250 },
+      { num: "12841", name: "Coromandel Express Return", src: "HWH", dst: "MAS", dep: "15:20", arr: "20:00", fare: 1250 },
+      { num: "12618", name: "Mangala Lakshadweep", src: "ERS", dst: "NZM", dep: "13:25", arr: "13:15", fare: 1420 },
+      { num: "12904", name: "Golden Temple Mail", src: "ASR", dst: "BCT", dep: "18:55", arr: "23:35", fare: 1180 },
+      { num: "12414", name: "Pooja SF Express", src: "JAT", dst: "AII", dep: "18:15", arr: "12:10", fare: 890 },
+      { num: "12019", name: "Howrah Shatabdi", src: "HWH", dst: "RNC", dep: "06:05", arr: "13:15", fare: 990 },
+      { num: "12020", name: "Howrah Shatabdi Return", src: "RNC", dst: "HWH", dep: "13:45", arr: "21:30", fare: 990 },
+      { num: "12626", name: "Kerala Express", src: "NDLS", dst: "TVC", dep: "20:10", arr: "18:00", fare: 1450 },
+      { num: "12245", name: "Howrah Duronto", src: "HWH", dst: "SMVB", dep: "10:50", arr: "16:00", fare: 1980 },
+      { num: "12724", name: "Telangana Express", src: "NDLS", dst: "HYB", dep: "16:00", arr: "17:10", fare: 1120 },
+      { num: "12953", name: "August Kranti Rajdhani", src: "BCT", dst: "NZM", dep: "17:10", arr: "10:55", fare: 2150 },
+      { num: "12079", name: "Bengaluru Jan Shatabdi", src: "SBC", dst: "UBL", dep: "06:00", arr: "13:00", fare: 650 },
+      { num: "12080", name: "Jan Shatabdi Return", src: "UBL", dst: "SBC", dep: "14:00", arr: "21:15", fare: 650 },
+      { num: "12051", name: "Jan Shatabdi Express", src: "CSMT", dst: "MAO", dep: "05:10", arr: "14:10", fare: 850 },
+      { num: "12052", name: "Jan Shatabdi Return", src: "MAO", dst: "CSMT", dep: "14:40", arr: "23:55", fare: 850 },
+      { num: "12401", name: "Nanda Devi Express", src: "KOTA", dst: "DDN", dep: "17:55", arr: "05:40", fare: 780 },
+      { num: "12402", name: "Nanda Devi Return", src: "DDN", dst: "KOTA", dep: "22:45", arr: "10:35", fare: 780 },
+      { num: "12059", name: "Kota Jan Shatabdi", src: "KOTA", dst: "NZM", dep: "06:15", arr: "12:30", fare: 540 },
+      { num: "12060", name: "Kota Jan Shatabdi Return", src: "NZM", dst: "KOTA", dep: "12:45", arr: "18:55", fare: 540 },
+      { num: "12497", name: "Shane Punjab", src: "NDLS", dst: "ASR", dep: "06:40", arr: "14:15", fare: 520 },
+      { num: "12498", name: "Shane Punjab Return", src: "ASR", dst: "NDLS", dep: "15:10", arr: "22:30", fare: 520 },
+      { num: "12011", name: "Kalka Shatabdi", src: "NDLS", dst: "CDG", dep: "07:40", arr: "11:05", fare: 750 },
+      { num: "12012", name: "Kalka Shatabdi Return", src: "CDG", dst: "NDLS", dep: "18:23", arr: "21:55", fare: 750 },
+      { num: "12981", name: "Chetak Express", src: "NZM", dst: "UDZ", dep: "20:40", arr: "07:50", fare: 680 },
+      { num: "12982", name: "Chetak Express Return", src: "UDZ", dst: "NZM", dep: "17:00", arr: "05:05", fare: 680 },
+      { num: "12801", name: "Purushottam Express", src: "PURI", dst: "NDLS", dep: "21:55", arr: "04:00", fare: 980 },
+      { num: "12802", name: "Purushottam Return", src: "NDLS", dst: "PURI", dep: "22:40", arr: "05:25", fare: 980 },
+      { num: "12565", name: "Bihar Sampark Kranti", src: "DBG", dst: "NDLS", dep: "08:25", arr: "05:15", fare: 880 },
+      { num: "12566", name: "Bihar Sampark Kranti Return", src: "NDLS", dst: "DBG", dep: "13:00", arr: "09:30", fare: 880 },
+      { num: "12905", name: "Shalimar Superfast", src: "PBR", dst: "SHM", dep: "08:50", arr: "03:50", fare: 1350 },
+      { num: "12906", name: "Shalimar Superfast Return", src: "SHM", dst: "PBR", dep: "20:30", arr: "18:45", fare: 1350 },
+      { num: "12651", name: "Tamil Nadu Sampark Kranti", src: "MDU", dst: "NZM", dep: "00:55", arr: "18:30", fare: 1480 },
+      { num: "12652", name: "Tamil Nadu Sampark Return", src: "NZM", dst: "MDU", dep: "05:20", arr: "00:05", fare: 1480 },
+    ];
+
+    for (const r of REGIONAL_ACTIVE_SERVICES) {
+      if (seenTrains.has(r.num)) continue;
+      seenTrains.add(r.num);
+
+      const src = stMap.get(r.src);
+      const dst = stMap.get(r.dst);
+      if (!src || !dst) continue;
+
+      const depClock = clock(r.dep);
+      let arrClock = clock(r.arr);
+      if (arrClock <= depClock) arrClock += 1440;
+      const duration = arrClock - depClock;
+
+      const from: StopPoint = {
+        stationId: `st-${src.station_code}`,
+        code: src.station_code,
+        name: src.station_name,
+        city: src.city,
+        lat: src.latitude,
+        lng: src.longitude,
+        arrival: null,
+        departure: r.dep,
+        arriveAt: 0,
+        departAt: 0,
+        km: 0,
+      };
+
+      const to: StopPoint = {
+        stationId: `st-${dst.station_code}`,
+        code: dst.station_code,
+        name: dst.station_name,
+        city: dst.city,
+        lat: dst.latitude,
+        lng: dst.longitude,
+        arrival: r.arr,
+        departure: null,
+        arriveAt: duration,
+        departAt: duration,
+        km: 750,
+      };
+
+      runs.push({
+        scheduleId: `regional-${r.num}`,
+        trainNumber: r.num,
+        trainName: r.name,
+        fare: r.fare,
+        seats: 380,
+        departure: r.dep,
+        arrival: r.arr,
+        stops: [from, to],
+        from,
+        to,
+        duration: duration > 0 ? duration : 420,
       });
     }
 
