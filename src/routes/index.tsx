@@ -32,7 +32,7 @@ function Index() {
       <section className="relative min-h-[92vh] overflow-hidden">
         <img
           src={heroTrain}
-          alt="Express train crossing a stone viaduct at golden dusk"
+          alt="Vande Bharat Express train crossing a scenic railway bridge in the Western Ghats at golden sunset"
           width={1920}
           height={1088}
           className="absolute inset-0 size-full object-cover"

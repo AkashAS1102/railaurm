@@ -20,38 +20,20 @@ export const Route = createFileRoute("/live")({
   component: LivePage,
 });
 
-/* Equirectangular projection tuned to the Indian subcontinent. */
-const LNG_MIN = 67.5;
+import { INDIA_BOUNDARY } from "@/lib/indiaOutline";
+
+/* Equirectangular projection tuned accurately to the Indian subcontinent. */
+const LNG_MIN = 68.0;
 const LNG_MAX = 97.5;
-const LAT_MIN = 6;
-const LAT_MAX = 36;
+const LAT_MIN = 7.5;
+const LAT_MAX = 36.5;
 const W = 1000;
 const H = 1000;
 const px = (lng: number) => ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * W;
 const py = (lat: number) => ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * H;
 
-/* A denser national outline for a cleaner silhouette. */
-const OUTLINE: Array<[number, number]> = [
-  [68.18, 23.86], [68.95, 22.45], [69.9, 22.55], [70.2, 21.1], [71.1, 20.75],
-  [72.65, 21.7], [72.85, 20.7], [72.82, 19.08], [73.3, 17.6], [73.55, 15.9],
-  [74.1, 14.6], [74.7, 13.2], [75.3, 11.9], [76.0, 10.4], [76.6, 9.0],
-  [77.55, 8.08], [78.2, 8.8], [79.3, 9.9], [79.9, 11.4], [80.3, 13.1],
-  [80.2, 14.5], [81.2, 16.3], [82.3, 16.9], [83.5, 17.9], [85.1, 19.5],
-  [86.5, 20.2], [87.1, 21.4], [88.05, 21.6], [88.9, 21.8], [89.05, 22.6],
-  [88.6, 23.3], [88.1, 24.4], [88.35, 25.2], [89.8, 25.3], [89.85, 26.1],
-  [91.0, 26.2], [91.3, 24.9], [92.4, 24.2], [92.9, 22.2], [92.3, 23.8],
-  [92.1, 25.2], [92.9, 26.1], [94.3, 27.0], [95.3, 26.7], [96.3, 27.3],
-  [97.15, 28.1], [96.0, 28.5], [94.5, 29.0], [92.6, 27.9], [91.6, 27.9],
-  [90.4, 28.1], [89.1, 28.1], [88.1, 27.9], [86.0, 28.1], [84.0, 28.9],
-  [82.2, 30.2], [80.1, 30.6], [78.8, 31.4], [78.4, 32.6], [79.2, 33.3],
-  [77.8, 35.4], [76.1, 34.7], [74.1, 34.6], [73.9, 33.2], [74.6, 32.0],
-  [74.5, 30.9], [73.5, 29.9], [72.3, 28.7], [70.8, 27.7], [70.6, 25.7],
-  [69.5, 24.3], [68.18, 23.86],
-];
-
-
 const OUTLINE_PATH =
-  OUTLINE.map(([lng, lat], i) => `${i === 0 ? "M" : "L"}${px(lng).toFixed(1)},${py(lat).toFixed(1)}`)
+  INDIA_BOUNDARY.map(([lng, lat], i) => `${i === 0 ? "M" : "L"}${px(lng).toFixed(1)},${py(lat).toFixed(1)}`)
     .join(" ") + " Z";
 
 type Positioned = { run: LiveRun; pos: RunPosition };
