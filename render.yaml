@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: railaurum-backend
+    runtime: node
+    region: singapore   # change to your nearest region
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false   # set manually in Render dashboard
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false   # set manually in Render dashboard — keep secret!
+      - key: FRONTEND_URL
+        sync: false   # your Vercel deployment URL
