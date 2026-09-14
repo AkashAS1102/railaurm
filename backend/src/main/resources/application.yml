@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Supabase uses symmetric key (HS256) for JWTs. 
+          # We'll configure this programmatically using SUPABASE_JWT_SECRET.
+          pass: true
+
+server:
+  port: ${PORT:8080}
+
+supabase:
+  url: ${SUPABASE_URL}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY}
+  jwt-secret: ${SUPABASE_JWT_SECRET}
+
+cors:
+  allowed-origins: ${FRONTEND_URL:http://localhost:5173,http://localhost:4173}
