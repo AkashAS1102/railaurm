@@ -1,5 +1,0 @@
-chore: add Dockerfile and Render deployment config for Java backend
-
-- Add multi-stage Dockerfile for Maven build and lightweight JRE runtime
-- Update render.yaml with Docker runtime definition and environment variables
-- Ignore Maven target/ directory in .gitignore
