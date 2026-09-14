@@ -40,13 +40,32 @@ const TRAIN_SELECT = `id, journey_date, departure_time, arrival_time, travel_cla
     destination:stations!trains_destination_station_id_fkey ( id, station_code, station_name, city )
   )`;
 
+export const DEFAULT_STATIONS: Station[] = [
+  { id: "s1", station_code: "NDLS", station_name: "New Delhi", city: "Delhi" },
+  { id: "s2", station_code: "BCT", station_name: "Mumbai Central", city: "Mumbai" },
+  { id: "s3", station_code: "HWH", station_name: "Howrah Junction", city: "Kolkata" },
+  { id: "s4", station_code: "MAS", station_name: "Chennai Central", city: "Chennai" },
+  { id: "s5", station_code: "SBC", station_name: "KSR Bengaluru", city: "Bengaluru" },
+  { id: "s6", station_code: "HYB", station_name: "Hyderabad Deccan", city: "Hyderabad" },
+  { id: "s7", station_code: "PUNE", station_name: "Pune Junction", city: "Pune" },
+  { id: "s8", station_code: "ADI", station_name: "Ahmedabad Junction", city: "Ahmedabad" },
+  { id: "s9", station_code: "JP", station_name: "Jaipur Junction", city: "Jaipur" },
+  { id: "s10", station_code: "LKO", station_name: "Lucknow Charbagh", city: "Lucknow" },
+];
+
 export async function fetchStations(): Promise<Station[]> {
-  const { data, error } = await supabase
-    .from("stations")
-    .select("id, station_code, station_name, city")
-    .order("station_name");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Station[];
+  try {
+    const { data, error } = await supabase
+      .from("stations")
+      .select("id, station_code, station_name, city")
+      .order("station_name");
+    if (!error && data && data.length > 0) {
+      return data as Station[];
+    }
+  } catch (err) {
+    console.warn("Could not fetch stations from database, using fallback list:", err);
+  }
+  return DEFAULT_STATIONS;
 }
 
 export async function searchSchedules(params: {

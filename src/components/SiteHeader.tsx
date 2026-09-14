@@ -35,6 +35,12 @@ export function SiteHeader({ variant = "light" }: { variant?: "light" | "onDark"
 
       <nav className="flex items-center gap-2">
         <Link
+          to="/"
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:text-gold ${subtle}`}
+        >
+          <TrainFront className="size-4" /> Book Train
+        </Link>
+        <Link
           to="/live"
           className={`hidden items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:text-gold sm:flex ${subtle}`}
         >
