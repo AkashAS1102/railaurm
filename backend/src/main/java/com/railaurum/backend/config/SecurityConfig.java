@@ -33,7 +33,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/api/demo-account", "/api/stations", "/api/schedules/search", "/api/live-runs").permitAll()
+                .requestMatchers("/", "/error", "/api/test", "/api/demo-account", "/api/stations", "/api/schedules/search", "/api/live-runs").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
