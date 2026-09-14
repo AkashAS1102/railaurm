@@ -1,0 +1,4 @@
+chore: update favicon to RailAurum branding
+
+- Replaced default Lovable favicon.ico with a custom gold train SVG
+- Updated index.html to point to the new SVG favicon

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Dark Background -->
+  <rect width="256" height="256" fill="#18181b" rx="56" />
+  <!-- Gold Train Icon -->
+  <g transform="translate(44, 44) scale(7)" stroke="#d4af37" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 3.1c-3.1.2-5.4 2.8-5.4 5.9v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-3.1-2.3-5.7-5.4-5.9" />
+    <path d="M2 16h20" />
+    <path d="m8 21-2 2" />
+    <path d="m16 21 2 2" />
+    <circle cx="9" cy="18" r="1" fill="#d4af37" />
+    <circle cx="15" cy="18" r="1" fill="#d4af37" />
+    <rect width="10" height="6" x="7" y="7" rx="1" />
+  </g>
+</svg>
