@@ -15,7 +15,7 @@ import java.util.Map;
 @RequestMapping("/api")
 public class AuthController {
 
-    @Value("${supabase.url:https://jdhmgnoigrgndeqjlafs.supabase.co}")
+    @Value("${supabase.url:https://your-project-id.supabase.co}")
     private String supabaseUrl;
 
     @Value("${supabase.service-role-key:}")

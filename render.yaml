@@ -10,13 +10,13 @@ services:
       - key: PORT
         value: 8080
       - key: SPRING_DATASOURCE_URL
-        sync: false   # e.g., jdbc:postgresql://db.jdhmgnoigrgndeqjlafs.supabase.co:5432/postgres
+        sync: false   # e.g., jdbc:postgresql://db.your-project-id.supabase.co:5432/postgres
       - key: SPRING_DATASOURCE_USERNAME
         value: postgres
       - key: SPRING_DATASOURCE_PASSWORD
         sync: false   # your Supabase DB password
       - key: SUPABASE_URL
-        value: https://jdhmgnoigrgndeqjlafs.supabase.co
+        sync: false   # e.g., https://your-project-id.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false   # from Supabase Project Settings -> API
       - key: SUPABASE_JWT_SECRET

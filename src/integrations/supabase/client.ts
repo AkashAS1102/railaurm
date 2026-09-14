@@ -2,16 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
 const SUPABASE_URL = (import.meta.env?.VITE_SUPABASE_URL ||
-  (typeof process !== "undefined" ? process.env?.VITE_SUPABASE_URL : "") ||
-  "https://jdhmgnoigrgndeqjlafs.supabase.co") as string;
+  (typeof process !== "undefined" ? process.env?.VITE_SUPABASE_URL : "")) as string;
 const SUPABASE_KEY = (import.meta.env?.VITE_SUPABASE_ANON_KEY ||
   import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  (typeof process !== "undefined" ? process.env?.VITE_SUPABASE_ANON_KEY : "") ||
-  "sb_publishable_nfBRMM0mIPJhrfFCunSDlg_Gh4HDa_Y") as string;
+  (typeof process !== "undefined" ? process.env?.VITE_SUPABASE_ANON_KEY : "")) as string;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  throw new Error(
-    "Missing Supabase URL or Key in environment variables. Check your .env file."
+  console.warn(
+    "Supabase URL or Key is not defined in environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file."
   );
 }
 

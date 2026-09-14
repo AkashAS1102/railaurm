@@ -15,7 +15,7 @@ server:
   port: ${PORT:8080}
 
 supabase:
-  url: ${SUPABASE_URL:https://jdhmgnoigrgndeqjlafs.supabase.co}
+  url: ${SUPABASE_URL:https://your-project-id.supabase.co}
   service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:your-service-role-key}
   jwt-secret: ${SUPABASE_JWT_SECRET:your-jwt-secret-must-be-at-least-32-chars-long-to-prevent-startup-crash-because-hs256-requires-it}
 

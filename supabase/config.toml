@@ -1,1 +1,2 @@
-project_id = "jdhmgnoigrgndeqjlafs"
+# Set your Supabase project ref here (found in your Supabase dashboard URL or Project Settings)
+project_id = "your-project-id"
