@@ -26,26 +26,29 @@ function AuthPage() {
     if (!loading && user) navigate({ to: "/bookings", replace: true });
   }, [loading, user, navigate]);
 
+  function isConfigured() {
+    const url = import.meta.env.VITE_SUPABASE_URL || "";
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+    return url && !url.includes("your-project-id") && key && !key.includes("your-anon");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isConfigured()) {
+      toast.error("Please add your Supabase URL and Key in your .env file to sign in.");
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { name, phone },
-          },
+          options: { data: { name, phone } },
         });
         if (error) throw error;
-        if (!data.session) {
-          toast.success("Check your inbox to confirm your email, then sign in.");
-          setMode("signin");
-        } else {
-          navigate({ to: "/bookings" });
-        }
+        toast.success("Account created! Check your email to confirm, or sign in.");
+        setMode("signin");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -59,6 +62,10 @@ function AuthPage() {
   }
 
   async function demo(role: "customer" | "admin") {
+    if (!isConfigured()) {
+      toast.error("Please add your Supabase URL and Key in your .env file to enable demo login.");
+      return;
+    }
     setBusy(true);
     try {
       const creds = await ensureDemoAccount({ data: { role } });
@@ -115,7 +122,14 @@ function AuthPage() {
               : "It takes less than a minute."}
           </p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4">
+          {!isConfigured() && (
+            <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+              <strong className="block font-semibold">Supabase Keys Required</strong>
+              Please add your active <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to your <code>.env</code> file to enable login and booking.
+            </div>
+          )}
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
             {mode === "signup" && (
               <>
                 <label className="block">
