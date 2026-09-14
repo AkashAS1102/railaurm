@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { CLASSES, fetchStations, todayISO } from "@/lib/rail";
 import { Button } from "@/components/ui/button";
 
+import { StationPicker } from "@/components/StationPicker";
+
 type Props = {
   initial?: { from?: string; to?: string; date?: string; cls?: string };
   compact?: boolean;
@@ -52,41 +54,33 @@ export function SearchWidget({ initial, compact }: Props) {
     <form
       onSubmit={submit}
       className={`grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-luxe sm:p-5 ${
-        compact ? "" : "md:grid-cols-[1fr_auto_1fr_1fr_0.8fr_auto] md:items-end"
+        compact ? "" : "md:grid-cols-[1.3fr_auto_1.3fr_1fr_0.8fr_auto] md:items-end"
       }`}
     >
-      <label className="block">
-        <span className="eyebrow mb-1.5 block">From</span>
-        <select className={field} value={from} onChange={(e) => setFrom(e.target.value)}>
-          <option value="">Select station</option>
-          {stations.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.station_name} ({s.station_code})
-            </option>
-          ))}
-        </select>
-      </label>
+      <StationPicker
+        label="From"
+        value={from}
+        onChange={setFrom}
+        stations={stations}
+        placeholder="Search origin station..."
+      />
 
       <button
         type="button"
         onClick={swap}
         aria-label="Swap stations"
-        className="mx-auto grid size-11 place-items-center rounded-xl border border-border bg-secondary text-foreground transition-colors hover:border-gold hover:text-gold"
+        className="mx-auto mb-1 grid size-11 place-items-center rounded-xl border border-border bg-secondary text-foreground transition-colors hover:border-gold hover:text-gold"
       >
         <ArrowLeftRight className="size-4" />
       </button>
 
-      <label className="block">
-        <span className="eyebrow mb-1.5 block">To</span>
-        <select className={field} value={to} onChange={(e) => setTo(e.target.value)}>
-          <option value="">Select station</option>
-          {stations.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.station_name} ({s.station_code})
-            </option>
-          ))}
-        </select>
-      </label>
+      <StationPicker
+        label="To"
+        value={to}
+        onChange={setTo}
+        stations={stations}
+        placeholder="Search destination station..."
+      />
 
       <label className="block">
         <span className="eyebrow mb-1.5 block">Journey date</span>
