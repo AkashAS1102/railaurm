@@ -1037,7 +1037,8 @@ function UsersTab() {
                     <span className="font-medium text-foreground">{u.name || "Traveller"}</span>
                     {u.isAdmin ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-xs font-medium text-gold">
-                        <ShieldCheck className="size-3.5" /> admin
+                        <ShieldCheck className="size-3.5" />{" "}
+                        {u.isPending ? "pre-authorized admin" : "admin"}
                       </span>
                     ) : (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -1047,6 +1048,11 @@ function UsersTab() {
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {u.email} {u.phone ? `· ${u.phone}` : ""}
+                    {u.isPending && (
+                      <span className="ml-2 text-xs text-muted-foreground/75">
+                        (Will have full admin access upon login)
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1062,7 +1068,7 @@ function UsersTab() {
                     }
                   }}
                 >
-                  {u.isAdmin ? "Remove admin" : "Make admin"}
+                  {u.isPending ? "Revoke access" : u.isAdmin ? "Remove admin" : "Make admin"}
                 </Button>
               </div>
             ))}

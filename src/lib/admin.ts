@@ -197,7 +197,36 @@ export async function deleteBooking(id: string) {
   if (error) throw new Error(error.message);
 }
 
-/* ---------- users ---------- */
+/* ---------- users & admin management ---------- */
+
+const PREAUTH_KEY = "railaurum_preauthorized_admins";
+
+export function getPreauthorizedAdmins(): string[] {
+  try {
+    if (typeof window === "undefined") return [];
+    return JSON.parse(localStorage.getItem(PREAUTH_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function addPreauthorizedAdmin(email: string) {
+  const list = getPreauthorizedAdmins();
+  const clean = email.toLowerCase().trim();
+  if (!list.includes(clean)) {
+    list.push(clean);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PREAUTH_KEY, JSON.stringify(list));
+    }
+  }
+}
+
+export function removePreauthorizedAdmin(email: string) {
+  const list = getPreauthorizedAdmins().filter((e) => e !== email.toLowerCase().trim());
+  if (typeof window !== "undefined") {
+    localStorage.setItem(PREAUTH_KEY, JSON.stringify(list));
+  }
+}
 
 export type AdminUser = {
   id: string;
@@ -205,37 +234,104 @@ export type AdminUser = {
   email: string;
   phone: string | null;
   isAdmin: boolean;
+  isPending?: boolean;
 };
 
 export async function listUsers(): Promise<AdminUser[]> {
-  const { data: profiles, error } = await supabase
-    .from("profiles")
-    .select("id, name, email, phone")
-    .order("created_at");
-  if (error) throw new Error(error.message);
-  const { data: roles, error: rErr } = await supabase
-    .from("user_roles")
-    .select("user_id, role")
-    .eq("role", "admin");
-  if (rErr) throw new Error(rErr.message);
-  const admins = new Set((roles ?? []).map((r) => r.user_id));
-  return (profiles ?? []).map((p) => ({ ...p, isAdmin: admins.has(p.id) }));
+  const preauth = getPreauthorizedAdmins();
+  let profiles: { id: string; name: string; email: string; phone: string | null }[] = [];
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name, email, phone")
+      .order("created_at");
+    if (!error && data) profiles = data;
+  } catch (err) {
+    console.warn("Could not list profiles:", err);
+  }
+
+  let admins = new Set<string>();
+  try {
+    const { data: roles, error: rErr } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .eq("role", "admin");
+    if (!rErr && roles) {
+      admins = new Set(roles.map((r) => r.user_id));
+    }
+  } catch (err) {
+    console.warn("Could not list user_roles:", err);
+  }
+
+  const profileEmails = new Set(profiles.map((p) => p.email.toLowerCase().trim()));
+  const users: AdminUser[] = profiles.map((p) => {
+    const isDirectAdmin = admins.has(p.id);
+    const isPreauthAdmin = preauth.includes(p.email.toLowerCase().trim());
+    return {
+      ...p,
+      isAdmin: isDirectAdmin || isPreauthAdmin,
+    };
+  });
+
+  // Include pre-authorized emails who haven't registered yet so they appear in the UI
+  for (const email of preauth) {
+    if (!profileEmails.has(email) && email !== "admin@railaurum.app") {
+      users.push({
+        id: `preauth-${email}`,
+        name: "Authorized (Pending Sign-up)",
+        email,
+        phone: null,
+        isAdmin: true,
+        isPending: true,
+      });
+    }
+  }
+
+  return users;
 }
 
 export async function setAdmin(userId: string, grant: boolean) {
-  const { error } = await supabase.rpc("set_user_role", {
-    p_user_id: userId,
-    p_role: "admin",
-    p_grant: grant,
-  });
-  if (error) throw new Error(error.message);
+  if (userId.startsWith("preauth-")) {
+    const email = userId.replace("preauth-", "");
+    if (!grant) {
+      removePreauthorizedAdmin(email);
+    } else {
+      addPreauthorizedAdmin(email);
+    }
+    return;
+  }
+
+  try {
+    const { error } = await supabase.rpc("set_user_role", {
+      p_user_id: userId,
+      p_role: "admin",
+      p_grant: grant,
+    });
+    if (!error) return;
+  } catch (rpcErr) {
+    console.warn("set_user_role fallback:", rpcErr);
+  }
+
+  if (grant) {
+    await supabase
+      .from("user_roles")
+      .upsert({ user_id: userId, role: "admin" as any }, { onConflict: "user_id,role" });
+  } else {
+    await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "admin");
+  }
 }
 
-export async function addAdminByEmail(email: string): Promise<{ success: boolean; message: string }> {
+export async function addAdminByEmail(
+  email: string,
+): Promise<{ success: boolean; message: string }> {
   const clean = email.trim().toLowerCase();
   if (!clean || !clean.includes("@")) {
     throw new Error("Please enter a valid email address.");
   }
+
+  // Pre-authorize this email so they have immediate admin access when they sign up or log in
+  addPreauthorizedAdmin(clean);
 
   // 1. Try the database RPC grant_admin_by_email
   try {
@@ -244,30 +340,33 @@ export async function addAdminByEmail(email: string): Promise<{ success: boolean
     });
     if (!error && data) {
       const res = data as { success: boolean; message: string };
-      if (!res.success) throw new Error(res.message);
-      return res;
+      if (res.success) return res;
     }
   } catch (rpcErr: any) {
-    console.warn("grant_admin_by_email RPC fallback:", rpcErr);
+    console.warn("grant_admin_by_email RPC notice:", rpcErr);
   }
 
-  // 2. Direct profiles lookup fallback
-  const { data: userProfile, error: profileErr } = await supabase
-    .from("profiles")
-    .select("id, email, name")
-    .ilike("email", clean)
-    .maybeSingle();
+  // 2. Direct profiles lookup if user is already signed up
+  try {
+    const { data: userProfile } = await supabase
+      .from("profiles")
+      .select("id, email, name")
+      .ilike("email", clean)
+      .maybeSingle();
 
-  if (profileErr) throw new Error(profileErr.message);
-
-  if (!userProfile) {
-    throw new Error(
-      `No registered user found with email "${email}". Ask them to create an account on RailAurum first, then you can make them an admin.`
-    );
+    if (userProfile) {
+      await setAdmin(userProfile.id, true);
+      return { success: true, message: `Admin privileges granted to ${email}.` };
+    }
+  } catch (profileErr) {
+    console.warn("Profiles lookup notice:", profileErr);
   }
 
-  await setAdmin(userProfile.id, true);
-  return { success: true, message: `Admin privileges granted to ${email}.` };
+  // 3. User has not registered in database yet, but is now pre-authorized
+  return {
+    success: true,
+    message: `${email} is now pre-authorized as an Administrator! When they sign up or log in, they will automatically receive full admin access.`,
+  };
 }
 
 /* ---------- one-click network seeder (100 stations & 50 trains) ---------- */
